@@ -51,14 +51,28 @@ export default function LeakCalculator(){
     const clean=raw.startsWith("http")?raw:`https://${raw}`;
     setScannedUrl(clean);setStage("scanning");setProgress(0);setErrorMsg("");
     const step=async i=>{setScanStep(SCAN_STEPS[i]);setProgress(Math.round(((i+1)/SCAN_STEPS.length)*80));await new Promise(r=>setTimeout(r,350+Math.random()*200));};
+    
     try{
       await step(0);await step(1);
-      const fr=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:3000,tools:[{type:"web_search_20250305",name:"web_search"}],messages:[{role:"user",content:`Fetch and analyse ${clean}. Return ONLY JSON, no markdown:\n{"pageTitle":"","titleLength":0,"metaDescription":"","h1Text":"","h2Count":0,"imageCount":0,"imagesWithAlt":0,"wordCount":0,"internalLinkCount":0,"hasSchema":false,"schemaTypes":[],"hasFAQ":false,"hasOGTags":false,"hasNAP":false,"hasPrimaryCTA":false,"hasForm":false,"hasPhoneVisible":false,"hasMobileViewport":false,"businessName":"","businessType":"","primaryKeywordGuess":"","notableIssues":[]}`}]})});
+      
+      // FETCH 1: Replaced Anthropic with OpenAI Middleman
+      const fr = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{
+            role: "user",
+            content: `Fetch and analyse ${clean}. Return ONLY JSON, no markdown:\n{"pageTitle":"","titleLength":0,"metaDescription":"","h1Text":"","h2Count":0,"imageCount":0,"imagesWithAlt":0,"wordCount":0,"internalLinkCount":0,"hasSchema":false,"schemaTypes":[],"hasFAQ":false,"hasOGTags":false,"hasNAP":false,"hasPrimaryCTA":false,"hasForm":false,"hasPhoneVisible":false,"hasMobileViewport":false,"businessName":"","businessType":"","primaryKeywordGuess":"","notableIssues":[]}`
+          }]
+        })
+      });
+      
       const fd=await fr.json();
       for(let i=2;i<9;i++)await step(i);
       let parsed=null;
       for(const b of(fd.content||[])){if(b.type==="text"){try{const c=b.text.replace(/```json|```/g,"").trim();const s=c.indexOf("{"),e=c.lastIndexOf("}");if(s!==-1&&e!==-1)parsed=JSON.parse(c.slice(s,e+1));}catch{}}}
       if(!parsed)throw new Error("parse fail");
+      
       await step(9);
       const results=CHECK_DEFS.map(def=>{
         let status="green",detail="";
@@ -86,22 +100,31 @@ export default function LeakCalculator(){
       const reds=results.filter(c=>c.status==="red");
       const ambers=results.filter(c=>c.status==="amber");
       const passing=results.filter(c=>c.status==="green").length;
-const ar = await fetch("/api/analyze", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    messages: [{
-      role: "user",
-      content: `You are Tenille Upton, TI Strategy Co. Scanned ${clean}. Business: ${parsed.businessName} — ${parsed.businessType}. Critical: ${reds.map(c=>c.label).join(", ")||"none"}. Amber: ${ambers.map(c=>c.label).join(", ")||"none"}. Passing: ${passing}/${results.length}.\n\nReturn ONLY JSON:\n{"headline":"punchy problem sentence max 15 words","summary":"2 sentences what scan found and business impact","fixes":[{"priority":"01","area":"SEO or AEO or Lead Gen","title":"fix title","impact":"one sentence impact"},{"priority":"02","area":"SEO or AEO or Lead Gen","title":"fix title","impact":"one sentence impact"},{"priority":"03","area":"SEO or AEO or Lead Gen","title":"fix title","impact":"one sentence impact"}],"roiLine":"one sentence dollar or lead impact","gateMessage":"one sentence urgency for full diagnostic"}`
-    }]
-  })
-});
-const ad = await ar.json();
-     let teaser=null;
+      
+      // FETCH 2: AI Summarization Middleman
+      const ar = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{
+            role: "user",
+            content: `You are Tenille Upton, TI Strategy Co. Scanned ${clean}. Business: ${parsed.businessName} — ${parsed.businessType}. Critical: ${reds.map(c=>c.label).join(", ")||"none"}. Amber: ${ambers.map(c=>c.label).join(", ")||"none"}. Passing: ${passing}/${results.length}.\n\nReturn ONLY JSON:\n{"headline":"punchy problem sentence max 15 words","summary":"2 sentences what scan found and business impact","fixes":[{"priority":"01","area":"SEO or AEO or Lead Gen","title":"fix title","impact":"one sentence impact"},{"priority":"02","area":"SEO or AEO or Lead Gen","title":"fix title","impact":"one sentence impact"},{"priority":"03","area":"SEO or AEO or Lead Gen","title":"fix title","impact":"one sentence impact"}],"roiLine":"one sentence dollar or lead impact","gateMessage":"one sentence urgency for full diagnostic"}`
+          }]
+        })
+      });
+      
+      const ad = await ar.json();
+      let teaser=null;
       for(const b of(ad.content||[])){if(b.type==="text"){try{const c=b.text.replace(/```json|```/g,"").trim();const s=c.indexOf("{"),e=c.lastIndexOf("}");if(s!==-1&&e!==-1)teaser=JSON.parse(c.slice(s,e+1));}catch{}}}
+      
       if(!teaser)teaser={headline:`${reds.length} critical gaps found`,summary:`Scan found ${reds.length} critical and ${ambers.length} issues needing attention.`,fixes:[{priority:"01",area:"SEO",title:reds[0]?.label||"Title optimisation",impact:"Directly impacts search ranking."},{priority:"02",area:"AEO",title:reds[1]?.label||"Schema markup",impact:"Required for AI search citations."},{priority:"03",area:"Lead Gen",title:reds[2]?.label||"CTA presence",impact:"High-intent visitors leave without converting."}],roiLine:"Fixing these typically improves organic traffic 20–40%.",gateMessage:`${reds.length+ambers.length} total issues found. A full Diagnostic maps every gap.`};
+      
       setAiTeaser(teaser);setProgress(100);await new Promise(r=>setTimeout(r,400));setStage("result");
-    }catch{setErrorMsg("We couldn't reach that URL. Check the address is correct and publicly accessible.");setStage("error");}
+      
+    }catch{
+      setErrorMsg("We couldn't reach that URL. Check the address is correct and publicly accessible.");
+      setStage("error");
+    }
   };
  
   const reset=()=>{setUrl("");setStage("input");setProgress(0);setChecks([]);setAiTeaser(null);setEmail("");setEmailSent(false);setErrorMsg("");};
