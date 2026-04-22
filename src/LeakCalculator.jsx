@@ -87,8 +87,17 @@ export default function LeakCalculator(){
       const ambers=results.filter(c=>c.status==="amber");
       const passing=results.filter(c=>c.status==="green").length;
 const ar = await fetch("/api/analyze", {
-      const ad=await ar.json();
-      let teaser=null;
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    messages: [{
+      role: "user",
+      content: `You are Tenille Upton, TI Strategy Co. Scanned ${clean}. Business: ${parsed.businessName} — ${parsed.businessType}. Critical: ${reds.map(c=>c.label).join(", ")||"none"}. Amber: ${ambers.map(c=>c.label).join(", ")||"none"}. Passing: ${passing}/${results.length}.\n\nReturn ONLY JSON:\n{"headline":"punchy problem sentence max 15 words","summary":"2 sentences what scan found and business impact","fixes":[{"priority":"01","area":"SEO or AEO or Lead Gen","title":"fix title","impact":"one sentence impact"},{"priority":"02","area":"SEO or AEO or Lead Gen","title":"fix title","impact":"one sentence impact"},{"priority":"03","area":"SEO or AEO or Lead Gen","title":"fix title","impact":"one sentence impact"}],"roiLine":"one sentence dollar or lead impact","gateMessage":"one sentence urgency for full diagnostic"}`
+    }]
+  })
+});
+const ad = await ar.json();
+     let teaser=null;
       for(const b of(ad.content||[])){if(b.type==="text"){try{const c=b.text.replace(/```json|```/g,"").trim();const s=c.indexOf("{"),e=c.lastIndexOf("}");if(s!==-1&&e!==-1)teaser=JSON.parse(c.slice(s,e+1));}catch{}}}
       if(!teaser)teaser={headline:`${reds.length} critical gaps found`,summary:`Scan found ${reds.length} critical and ${ambers.length} issues needing attention.`,fixes:[{priority:"01",area:"SEO",title:reds[0]?.label||"Title optimisation",impact:"Directly impacts search ranking."},{priority:"02",area:"AEO",title:reds[1]?.label||"Schema markup",impact:"Required for AI search citations."},{priority:"03",area:"Lead Gen",title:reds[2]?.label||"CTA presence",impact:"High-intent visitors leave without converting."}],roiLine:"Fixing these typically improves organic traffic 20–40%.",gateMessage:`${reds.length+ambers.length} total issues found. A full Diagnostic maps every gap.`};
       setAiTeaser(teaser);setProgress(100);await new Promise(r=>setTimeout(r,400));setStage("result");
